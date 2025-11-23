@@ -491,3 +491,5 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,macos,windows,intellij+all,python,node,venv,dotenv
+
+mcmaster.txt
