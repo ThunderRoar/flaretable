@@ -17,8 +17,10 @@
 body {
   margin: 0;
   padding: 0;
-  width: 400px; /* Set a fixed width for the popup */
-  height: 500px; /* Set a fixed height for the popup */
+  width: 400px;
+  /* Set a fixed width for the popup */
+  height: 500px;
+  /* Set a fixed height for the popup */
   overflow: hidden;
 }
 
