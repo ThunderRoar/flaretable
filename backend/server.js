@@ -150,22 +150,14 @@ app.post('/sonar-generate', async (req, res) => {
     const body = await orRes.json().catch(() => null);
     if (!orRes.ok) return res.status(orRes.status).json(body ?? { error: 'openrouter returned non-JSON response' });
 
-    const shouldParse = req.body?.response_format?.type === 'json_schema' || req.body?.parse_json === true;
-    if (shouldParse) {
-      try {
-        const rawText = body?.choices?.[0]?.message?.content ?? body?.choices?.[0]?.text ?? body?.output?.[0]?.content?.[0]?.text ?? null;
-        if (!rawText) {
-          return res.json({ success: false, error: 'no textual content found to parse', raw: body });
-        }
-        const cleaned = String(rawText).trim().replace(/^``````$/g, '').trim();
-        const parsed = JSON.parse(cleaned);
-        return res.json({ success: true, parsed, raw: body });
-      } catch (err) {
-        console.error('failed to parse model JSON output', err);
-        return res.status(502).json({ error: 'failed to parse JSON from model output', detail: String(err), raw: body });
-      }
+    // Extract the assistant textual content and return it directly.
+    const rawText = body?.choices?.[0]?.message?.content ?? body?.choices?.[0]?.text ?? body?.output?.[0]?.content?.[0]?.text ?? null;
+    if (rawText != null) {
+      // Return plain text containing only the assistant message content
+      return res.type('text').send(String(rawText));
     }
 
+    // Fallback: return the full provider response JSON
     return res.json(body);
   } catch (err) {
     console.error('sonar-generate error', err);
