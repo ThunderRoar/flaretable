@@ -6,14 +6,19 @@
       <p class="subtitle">Your schedule, your way.</p>
       
       <div class="actions">
-        <button @click="showPreview" class="action-btn primary">
+        <button v-if="events.length" @click="showPreview" class="action-btn primary">
           <span class="icon">📅</span>
           View Preview
         </button>
         
-        <button @click="downloadIcs" class="action-btn secondary">
+        <button v-if="events.length" @click="downloadIcs" class="action-btn secondary">
           <span class="icon">📥</span>
           Download .ics
+        </button>
+
+        <button @click="extractHtml" class="action-btn secondary">
+          <span class="icon">📄</span>
+          Extract HTML
         </button>
       </div>
     </div>
@@ -117,6 +122,10 @@ export default defineComponent({
 
     function showPreview() {
       currentView.value = 'calendar';
+    }
+
+    function extractHtml() {
+      console.log('Extract HTML clicked');
     }
 
     function downloadIcs() {
@@ -255,6 +264,7 @@ export default defineComponent({
       currentView,
       showPreview,
       downloadIcs,
+      extractHtml,
       hours,
       weekDays,
       weekRangeText,
@@ -375,12 +385,13 @@ export default defineComponent({
   -webkit-backdrop-filter: blur(40px) saturate(180%);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 16px;
 }
 
 .nav-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   flex: 1;
   justify-content: flex-end;
 }
