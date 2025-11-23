@@ -1,170 +1,114 @@
 import express from 'express';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import fetch from 'node-fetch'; // Make sure to `npm install node-fetch`
+import 'dotenv/config';
 
 const app = express();
-app.use(express.json());
+// Use a larger limit to handle potentially large HTML payloads
+app.use(express.json({ limit: '10mb' }));
 
-// POST /cf-generate
-// Body: { prompt: string, model?: string }
-// Calls Cloudflare's AI run endpoint for the configured model
-app.post('/cf-generate', async (req, res) => {
+// --- INTERNAL AI PROCESSING ENDPOINT ---
+// This endpoint does the actual work of calling the Cloudflare AI.
+// It is called by our own /cf-generate endpoint.
+app.post('/api/process-with-ai', async (req, res) => {
   const prompt = req.body?.prompt;
   if (!prompt || typeof prompt !== 'string') {
-    return res.status(400).json({ error: 'request body must include string "prompt"' });
+    return res.status(400).json({ error: 'Internal endpoint requires a string "prompt"' });
   }
 
-  // Default to Llama (Cloudflare Meta Llama instruct model)
-  const model = req.body?.model || process.env.CLOUDFLARE_MODEL || '@cf/meta/llama-3.1-8b-instruct-fast';
-
-  // Accept multiple env var names for flexibility (older code used CF_* vars)
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.CF_ACCOUNT_ID;
-  const token = process.env.CLOUDFLARE_API_TOKEN || process.env.CF_TOKEN || process.env.CLOUDFLARE_AUTH_TOKEN;
+  const model = process.env.CLOUDFLARE_MODEL || '@cf/meta/llama-3.1-8b-instruct-fast';
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const token = process.env.CLOUDFLARE_API_TOKEN;
 
   if (!accountId || !token) {
-    return res.status(500).json({ error: 'cloudflare account id and token must be set in env (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN or CF_ACCOUNT_ID / CF_TOKEN)' });
+    console.error('Cloudflare credentials are not set in the environment.');
+    return res.status(500).json({ error: 'Server is not configured correctly.' });
   }
 
-  // If the model string starts with '@' we will call the ai/run endpoint for that exact model path
-  // (e.g. @cf/meta/..., @hf/...). Otherwise we fallback to the responses endpoint.
-  const isRunModel = typeof model === 'string' && model.startsWith('@');
-
+  const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
+  
   try {
-    let url;
-    let bodyPayload;
-
-    if (isRunModel) {
-      // Example: https://api.cloudflare.com/client/v4/accounts/<ACCOUNT>/ai/run/@cf/meta/llama-3.1-8b-instruct-fast
-      url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
-
-      // Build messages payload matching the Cloudflare run endpoint examples
-      const systemMsg = req.body.system || 'You are a friendly assistant';
-      bodyPayload = {
-        messages: [
-          { role: 'system', content: systemMsg },
-          { role: 'user', content: prompt },
-        ],
-      };
-    } else {
-      // Fallback to the responses endpoint for other models
-      url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/responses`;
-      bodyPayload = {
-        input: prompt,
-        model: model,
-        temperature: req.body.temperature ?? 0.2,
-        max_output_tokens: req.body.max_output_tokens ?? 512,
-      };
-    }
-
-    const cfRes = await fetch(url, {
+    const aiResponse = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(bodyPayload),
+      body: JSON.stringify({ prompt }),
     });
 
-    const body = await cfRes.json().catch(() => null);
-    if (!cfRes.ok) return res.status(cfRes.status).json(body ?? { error: 'cloudflare returned non-JSON response' });
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      console.error('Cloudflare AI API Error:', errorText);
+      throw new Error(`Cloudflare AI API responded with status ${aiResponse.status}`);
+    }
 
-    return res.json(body);
-  } catch (err) {
-    console.error('cf-generate error', err);
-    return res.status(500).json({ error: 'internal error', detail: String(err) });
+    const aiResult = await aiResponse.json();
+    const icsContent = aiResult.result?.response;
+
+    if (!icsContent) {
+      throw new Error('AI did not return valid .ics content in the response.');
+    }
+
+    // Convert the raw .ics text to base64
+    const base64Ics = Buffer.from(icsContent).toString('base64');
+
+    // Send the final base64 encoded data back
+    res.status(200).json({ base64: base64Ics });
+
+  } catch (error) {
+    console.error('Error in /api/process-with-ai:', error.message);
+    res.status(500).json({ error: 'Failed to process request with AI.' });
   }
 });
 
-// POST /sonar-generate
-// Body: { prompt: string, model?: string }
-// Calls Perplexity's Sonar model via OpenRouter's chat completions endpoint.
-app.post('/sonar-generate', async (req, res) => {
-  const prompt = req.body?.prompt;
-  if (!prompt || typeof prompt !== 'string') {
-    return res.status(400).json({ error: 'request body must include string "prompt"' });
+
+// --- PUBLIC-FACING ENDPOINT ---
+// This is the endpoint your browser extension calls.
+app.post('/cf-generate', async (req, res) => {
+  const { html } = req.body;
+  if (!html || typeof html !== 'string') {
+    return res.status(400).json({ error: 'Request body must include string "html"' });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY || process.env.OR_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'openrouter api key must be set in env (OPENROUTER_API_KEY or OR_API_KEY)' });
-  }
+  // 1. Create a detailed prompt for the AI model
+  const prompt = `
+    Based on the following text content from a webpage, generate a valid iCalendar (.ics) file.
+    The .ics file should include all events found in the text, with their summaries (titles), start times (DTSTART), and end times (DTEND).
+    Ensure the output is ONLY the raw .ics file content, starting with "BEGIN:VCALENDAR" and ending with "END:VCALENDAR". Do not include any other text, explanations, or markdown code fences.
 
-  // Default model name; user or env may override
-  const model = req.body?.model || process.env.OPENROUTER_PERPLEXITY_MODEL || 'perplexity/sonar';
-
-  const url = 'https://openrouter.ai/api/v1/chat/completions';
+    Webpage Text:
+    ---
+    ${html}
+    ---
+  `;
 
   try {
-    const bodyPayload = {
-      model,
-      messages: [
-        { role: 'system', content: req.body.system || 'You are a helpful assistant' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: req.body.temperature ?? 0.2,
-      max_tokens: req.body.max_output_tokens ?? 512,
-      // Add JSON schema response_format for structured output
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "semester_dates",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              semester_start: {
-                type: "object",
-                properties: {
-                  year: { type: "integer" },
-                  month: { type: "integer" },
-                  day: { type: "integer" }
-                },
-                required: ["year", "month", "day"]
-              },
-              semester_end: {
-                type: "object",
-                properties: {
-                  year: { type: "integer" },
-                  month: { type: "integer" },
-                  day: { type: "integer" }
-                },
-                required: ["year", "month", "day"]
-              }
-            },
-            required: ["semester_start", "semester_end"]
-          }
-        }
-      }
-    };
-
-    const orRes = await fetch(url, {
+    // 2. Call our own internal AI endpoint to do the processing
+    const internalApiResponse = await fetch(`http://localhost:${port}/api/process-with-ai`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(bodyPayload),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
     });
 
-    const body = await orRes.json().catch(() => null);
-    if (!orRes.ok) return res.status(orRes.status).json(body ?? { error: 'openrouter returned non-JSON response' });
-
-    // Extract the assistant textual content and return it directly.
-    const rawText = body?.choices?.[0]?.message?.content ?? body?.choices?.[0]?.text ?? body?.output?.[0]?.content?.[0]?.text ?? null;
-    if (rawText != null) {
-      // Return plain text containing only the assistant message content
-      return res.type('text').send(String(rawText));
+    if (!internalApiResponse.ok) {
+      // If the internal call fails, pass its error along
+      const errorBody = await internalApiResponse.json();
+      return res.status(internalApiResponse.status).json(errorBody);
     }
 
-    // Fallback: return the full provider response JSON
-    return res.json(body);
-  } catch (err) {
-    console.error('sonar-generate error', err);
-    return res.status(500).json({ error: 'internal error', detail: String(err) });
+    // 3. Get the JSON response (with base64 data) from the internal endpoint
+    const finalData = await internalApiResponse.json();
+
+    // 4. Send the final response back to the browser extension
+    res.status(200).json(finalData);
+
+  } catch (error) {
+    console.error('Error in /cf-generate orchestrator:', error.message);
+    res.status(500).json({ error: 'Failed to orchestrate AI request.' });
   }
 });
 
-app.listen(process.env.PORT ?? 8787, () => {
-  console.log('Server ready');
+const port = process.env.PORT || 8787;
+app.listen(port, () => {
+  console.log(`Server listening on http://localhost:${port}`);
 });
