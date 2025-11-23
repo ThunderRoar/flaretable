@@ -50,21 +50,24 @@ async function extractHtml() {
       target: { tabId: tab.id },
       func: () => document.documentElement.outerHTML,
     });
+    console.log("Results", results);
     const html = results?.[0]?.result;
     if (!html) throw new Error('Failed to capture page HTML.');
+    const filtered = html.replace(/<[^>]*>/g, '');
+    console.log("HTML", filtered);
 
-    const response = await fetch('http://localhost:8787/cf-generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ html }),
-    });
-    if (!response.ok) throw new Error(`Backend Error: ${response.statusText}`);
+    // const response = await fetch('http://localhost:8787/cf-generate', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({ html }),
+    // });
+    // if (!response.ok) throw new Error(`Backend Error: ${response.statusText}`);
 
-    const data = await response.json();
-    if (!data.base64) throw new Error('Invalid response from backend.');
+    // const data = await response.json();
+    // if (!data.base64) throw new Error('Invalid response from backend.');
 
-    icsData.value = data.base64;
-    toast.success('Calendar extracted successfully!');
+    // icsData.value = data.base64;
+    // toast.success('Calendar extracted successfully!');
   } catch (err: any) {
     toast.error(err.message || 'An unknown error occurred.');
     console.error('[FlareTable Error]', err);
