@@ -34,8 +34,8 @@ app.post('/cf-generate', async (req, res) => {
     return res.status(400).json({ error: 'request body must include string "prompt"' });
   }
 
-  // Default to Gemma (Hugging Face / Google Gemma model on Cloudflare)
-  const model = req.body?.model || process.env.CLOUDFLARE_MODEL || '@hf/google/gemma-7b-it';
+  // Default to Llama (Cloudflare Meta Llama instruct model)
+  const model = req.body?.model || process.env.CLOUDFLARE_MODEL || '@cf/meta/llama-3.1-8b-instruct-fast';
 
   // Accept multiple env var names for flexibility (older code used CF_* vars)
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.CF_ACCOUNT_ID;
@@ -45,18 +45,19 @@ app.post('/cf-generate', async (req, res) => {
     return res.status(500).json({ error: 'cloudflare account id and token must be set in env (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN or CF_ACCOUNT_ID / CF_TOKEN)' });
   }
 
-  // If the model is an HF style model (starts with @hf) we call the ai/run endpoint for that exact model
-  const isHfModel = typeof model === 'string' && model.startsWith('@hf');
+  // If the model string starts with '@' we will call the ai/run endpoint for that exact model path
+  // (e.g. @cf/meta/..., @hf/...). Otherwise we fallback to the responses endpoint.
+  const isRunModel = typeof model === 'string' && model.startsWith('@');
 
   try {
     let url;
     let bodyPayload;
 
-    if (isHfModel) {
-      // Example: https://api.cloudflare.com/client/v4/accounts/<ACCOUNT>/ai/run/@hf/google/gemma-7b-it
+    if (isRunModel) {
+      // Example: https://api.cloudflare.com/client/v4/accounts/<ACCOUNT>/ai/run/@cf/meta/llama-3.1-8b-instruct-fast
       url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
 
-      // Build messages payload matching your example curl
+      // Build messages payload matching the Cloudflare run endpoint examples
       const systemMsg = req.body.system || 'You are a friendly assistant';
       bodyPayload = {
         messages: [
