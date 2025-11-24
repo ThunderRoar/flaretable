@@ -8,9 +8,15 @@ importers:
 
   .:
     dependencies:
+      ical.js:
+        specifier: ^2.2.1
+        version: 2.2.1
       vue:
         specifier: ^3.5.21
         version: 3.5.24(typescript@5.9.3)
+      vue-toastification:
+        specifier: 2.0.0-rc.5
+        version: 2.0.0-rc.5(vue@3.5.24(typescript@5.9.3))
     devDependencies:
       '@wxt-dev/module-vue':
         specifier: ^1.0.2
@@ -924,6 +930,9 @@ packages:
   htmlparser2@10.0.0:
     resolution: {integrity: sha512-TwAZM+zE5Tq3lrEHvOlvwgj1XLWQCtaaibSN11Q+gGBAS7Y1uZSWwXXRe4iF6OXnaq1riyQAPFOBtYc77Mxq0g==}
 
+  ical.js@2.2.1:
+    resolution: {integrity: sha512-yK/UlPbEs316igb/tjRgbFA8ZV75rCsBJp/hWOatpyaPNlgw0dGDmU+FoicOcwX4xXkeXOkYiOmCqNPFpNPkQg==}
+
   immediate@3.0.6:
     resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
 
@@ -1621,6 +1630,11 @@ packages:
 
   vscode-uri@3.1.0:
     resolution: {integrity: sha512-/BpdSx+yCQGnCvecbyXdxHDkuk55/G3xwnC0GqY4gmQ3j+A+g8kzzgB4Nk/SINjqn6+waqw3EgbVF2QKExkRxQ==}
+
+  vue-toastification@2.0.0-rc.5:
+    resolution: {integrity: sha512-q73e5jy6gucEO/U+P48hqX+/qyXDozAGmaGgLFm5tXX4wJBcVsnGp4e/iJqlm9xzHETYOilUuwOUje2Qg1JdwA==}
+    peerDependencies:
+      vue: ^3.0.2
 
   vue-tsc@3.1.5:
     resolution: {integrity: sha512-L/G9IUjOWhBU0yun89rv8fKqmKC+T0HfhrFjlIml71WpfBv9eb4E9Bev8FMbyueBIU9vxQqbd+oOsVcDa5amGw==}
@@ -2505,6 +2519,8 @@ snapshots:
       domutils: 3.2.2
       entities: 6.0.1
 
+  ical.js@2.2.1: {}
+
   immediate@3.0.6: {}
 
   import-meta-resolve@4.2.0: {}
@@ -3200,6 +3216,10 @@ snapshots:
       jiti: 2.6.1
 
   vscode-uri@3.1.0: {}
+
+  vue-toastification@2.0.0-rc.5(vue@3.5.24(typescript@5.9.3)):
+    dependencies:
+      vue: 3.5.24(typescript@5.9.3)
 
   vue-tsc@3.1.5(typescript@5.9.3):
     dependencies:
